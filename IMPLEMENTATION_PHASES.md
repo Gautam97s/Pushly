@@ -1,45 +1,56 @@
 # Pushly Implementation Phases
 
-This document is the detailed implementation tracker for Pushly. The project is developed in small, testable slices. Each phase should be completed and verified before the next phase expands the system.
+This document explains how Pushly is being built. It is written as a simple progress tracker so anyone can understand what the project does, what has been completed, and what is planned next.
 
-## Status Legend
+## What We Want to Build
 
-- **Completed**: implemented and verified.
-- **In progress**: currently being implemented.
-- **Planned**: defined but not started.
-- **Deferred**: intentionally postponed until the MVP is stable.
+Pushly will let a developer use their phone to manage Git projects that are still stored on their own Windows computer.
 
-## Overall MVP Goal
+The main goal is:
 
-A developer should be able to leave their IDE closed, open Pushly on a phone from another network, select a repository that remains on a Windows PC, review its changes, select files, commit, push to GitHub using the PC's existing Git authentication, and receive a reliable result.
+1. The developer leaves their computer and IDE as they are.
+2. They open Pushly on their phone.
+3. They choose their computer and a project.
+4. They review the changes already present on the computer.
+5. They choose which files to include.
+6. They create a commit and push it to GitHub.
+7. They receive the result on their phone.
+
+The project is being built in small steps so each part can be tested before the next part is added.
+
+## Status Meaning
+
+- **Completed**: built and tested.
+- **In progress**: currently being worked on.
+- **Planned**: agreed for later, but not started.
+- **Deferred**: intentionally saved for after the first usable version.
 
 ---
 
-## Phase 1: Local Git Core
+## Phase 1: Basic Git Commands
 
 **Status: Completed**
 
-### Purpose
+### What this phase means
 
-Create a small local CLI and a safe Git execution boundary before adding scanning, networking, or mobile features.
+We created the first small Pushly command-line program. It can ask Git for basic information about a project.
 
-### Implemented parts
+### What has been built
 
-- Initialized the Go module.
-- Added the `pushly` CLI entry point.
-- Added a Git client using the system Git executable through Go's `os/exec`.
-- Added a fixed operation allowlist.
-- Added read-only operations:
-  - `status`
-  - `diff`
-  - `branch`
-  - `remote`
-- Added repository working-directory support.
-- Added command timeouts.
-- Added combined Git output and structured execution errors.
-- Added unit tests for allowed and rejected operations.
+- Set up the Go project.
+- Created the Pushly command-line program.
+- Connected Pushly to the Git installed on the computer.
+- Added a fixed list of safe read-only commands.
+- Added commands to view:
+  - Project status
+  - File differences
+  - Current branch
+  - GitHub or other remote addresses
+- Added a time limit so a stuck Git command does not run forever.
+- Added useful error messages.
+- Added tests for allowed and rejected commands.
 
-### Current commands
+### Try it
 
 ```powershell
 go run ./cmd/pushly status .
@@ -48,292 +59,291 @@ go run ./cmd/pushly branch .
 go run ./cmd/pushly remote .
 ```
 
-### Acceptance criteria
+### What is confirmed
 
-- [x] Go module builds successfully.
-- [x] Read-only commands execute against a real repository.
-- [x] Unsupported operations are rejected.
-- [x] Git command failures are returned to the user.
-- [x] Unit tests pass.
-- [x] The CLI does not accept arbitrary shell commands.
+- [x] The Go project builds.
+- [x] The commands work with a real Git project.
+- [x] Unknown commands are rejected.
+- [x] Git errors are shown to the user.
+- [x] Tests pass.
+- [x] Pushly does not run random computer commands.
 
-### Known limitations
+### Current limits
 
-- Git output is still returned as raw text.
-- `git diff` does not include untracked files.
-- There are no write operations yet.
-- Repository paths are not yet validated against configured folders.
-
----
-
-## Phase 2: Repository and Scanner Layer
-
-**Status: In progress**
-
-### Purpose
-
-Discover authorized repositories and convert Git output into structured data that the agent and mobile app can safely use.
-
-### Part 2.1: Structured Git status
-
-- Add a machine-readable status operation using Git porcelain output.
-- Prefer NUL-separated records for reliable path parsing.
-- Parse the current branch and upstream information.
-- Parse ahead and behind counts.
-- Represent repository cleanliness.
-- Represent each change with:
-  - Repository-relative path.
-  - Original path for renames.
-  - Staged state.
-  - Worktree state.
-  - Untracked state.
-  - Modified, added, deleted, or renamed state.
-- Preserve spaces, Unicode characters, and rename pairs.
-
-### Part 2.2: Repository validation
-
-- Identify the real repository root using Git.
-- Reject paths that are not repositories.
-- Normalize Windows paths before comparison.
-- Ensure requested repositories remain inside configured parent folders.
-- Prevent path traversal and symlink escapes.
-- Keep repository-relative paths separate from operating-system paths.
-
-### Part 2.3: Configured folders
-
-- Store configured parent directories.
-- Normalize and validate directories when they are registered.
-- Prevent duplicate or overlapping folder registrations where appropriate.
-- Report inaccessible configured folders clearly.
-
-### Part 2.4: Bounded repository discovery
-
-- Recursively scan configured folders.
-- Detect `.git` directories and worktree files.
-- Enforce maximum scan depth.
-- Enforce maximum repository count.
-- Skip symlinks.
-- Skip inaccessible directories and continue scanning.
-- Record skipped paths and reasons.
-- Support explicit rescans.
-- Do not read or upload source-file contents during discovery.
-
-### Part 2.5: Repository metadata and snapshots
-
-Store or calculate:
-
-- Repository name.
-- Repository root.
-- Current branch.
-- Remote names and URLs, with credentials removed.
-- Last scan time.
-- Current status snapshot.
-- Snapshot identifier or hash for stale-state detection.
-
-Snapshots must be immutable. Before a future write operation, the agent will compare the latest repository state with the reviewed snapshot.
-
-### Part 2.6: Untracked-file behavior
-
-Normal `git diff` does not include untracked files. Pushly will therefore:
-
-- Show untracked files explicitly in status.
-- Avoid reading untracked content during repository discovery.
-- Provide controlled content or diff access only after the user selects a file.
-- Validate selected files against the repository root before reading them.
-- Avoid sending source content to the backend except as an encrypted user-requested payload.
-
-### Acceptance criteria
-
-- [ ] Parse clean repositories.
-- [ ] Parse modified, staged, untracked, deleted, and renamed files.
-- [ ] Parse paths containing spaces and Unicode characters.
-- [ ] Parse rename pairs correctly.
-- [ ] Discover multiple repositories in nested folders.
-- [ ] Respect scan depth and repository-count limits.
-- [ ] Skip symlinks and report inaccessible paths.
-- [ ] Reject repositories outside configured folders.
-- [ ] Prevent path traversal and symlink escapes.
-- [ ] Confirm discovery does not upload source code.
-- [ ] Detect when a status snapshot is stale.
-- [ ] Add unit tests and Windows filesystem integration tests.
+- The output is still mostly Git's normal text.
+- A normal diff does not show files that Git has never seen before.
+- Pushly cannot commit or push yet.
 
 ---
 
-## Phase 3: Local Windows Agent
+## Phase 2: Finding Projects and Understanding Changes
+
+**Status: Completed for the current implementation scope**
+
+### What this phase means
+
+Pushly now has the basic building blocks needed to find projects on the computer and understand what has changed inside them.
+
+### Part 2.1: Understanding project changes
+
+Pushly can identify:
+
+- The current branch.
+- The connected remote branch.
+- Whether the project is clean or has changes.
+- New files.
+- Edited files.
+- Deleted files.
+- Renamed files.
+- Files already prepared for a commit.
+- Files that are changed but not prepared.
+- File names containing spaces or special characters.
+
+The information is converted into a consistent format so the future phone app can display it clearly instead of trying to understand raw terminal text.
+
+### Part 2.2: Checking project locations
+
+Pushly checks that:
+
+- A selected location is really a Git project.
+- The project is inside a folder the user approved.
+- A file path cannot escape the approved project folder.
+- A shortcut or link cannot secretly point outside the approved folder.
+- Windows paths are handled consistently.
+
+### Part 2.3: Approved folders
+
+The user will choose which parent folders Pushly may inspect.
+
+Pushly now has a folder manager that:
+
+- Saves approved folders.
+- Cleans up folder paths before saving them.
+- Rejects missing or invalid folders.
+- Rejects duplicate folders.
+- Rejects folders that overlap with another approved folder.
+- Allows an approved folder to be removed.
+
+### Part 2.4: Finding Git projects
+
+Pushly can search inside an approved folder and find Git projects.
+
+The search:
+
+- Can look inside nested folders.
+- Has limits so it does not scan an entire computer by accident.
+- Skips shortcuts and links.
+- Skips folders it cannot access and reports them.
+- Finds normal Git projects and Git worktrees.
+- Does not read or upload project files just to find projects.
+- Can be run again when the user wants a fresh search.
+
+### Part 2.5: Remembering the reviewed state
+
+When the user reviews a project, Pushly can create a record of what the project looked like at that moment.
+
+Before a future commit, Pushly can check the project again. If something changed after the user reviewed it, Pushly will stop and ask the user to review the changes again. This helps prevent accidentally committing new work that the user never approved.
+
+### Part 2.6: New files
+
+Git's normal diff command does not show the contents of brand-new files. Pushly handles these separately:
+
+- New files are shown in the change list.
+- Their contents are not read during project discovery.
+- A file is read only after the user specifically selects it.
+- Large files are rejected by a size limit.
+- Unsafe paths and links are rejected.
+- File contents are not sent anywhere during discovery.
+
+### What is confirmed
+
+- [x] Pushly understands clean, edited, new, deleted, and renamed files.
+- [x] It handles file names with spaces and special characters.
+- [x] It can find projects inside nested folders.
+- [x] Search limits work.
+- [x] Links and inaccessible folders are handled safely.
+- [x] Approved-folder checks work.
+- [x] Project locations are checked using Git.
+- [x] Selected files can be read safely within size limits.
+- [x] Pushly can detect whether a reviewed project changed later.
+- [x] Tests cover the status parser and project scanner.
+- [ ] More Windows-specific tests are still useful.
+
+---
+
+## Phase 3: Windows Desktop Agent
 
 **Status: Planned**
 
-### Purpose
+### What this phase means
 
-Turn the local Git core and repository layer into a Windows background agent that can safely perform approved write operations.
+We will turn the local tools into a background program that can safely make approved changes to a project on the Windows computer.
 
-### Parts
+### What we will build
 
-- Add Windows configuration storage.
-- Add explicit changed-file selection.
-- Validate every selected repository-relative path.
-- Stage only selected files.
-- Never stage all changes implicitly.
-- Add commit operation with commit-message validation.
-- Add push operation using existing local Git authentication.
-- Run Git hooks normally.
-- Enforce timeouts and bounded output.
-- Prevent interactive Git prompts from hanging the agent.
-- Serialize operations per repository.
-- Refresh status immediately before write operations.
-- Reject stale status snapshots.
-- Add structured operation states and results.
-- Add Windows background-process or service support.
-- Add graceful shutdown and reconnect-ready lifecycle handling.
+- Save the user's settings on Windows.
+- Let the user choose specific files for a commit.
+- Make sure selected files belong to the correct project.
+- Commit only the selected files.
+- Never include every changed file by accident.
+- Accept and check a commit message.
+- Push using the Git login already set up on the computer.
+- Allow normal Git safety checks and hooks to run.
+- Stop commands that take too long.
+- Prevent Git from waiting forever for someone to type a password.
+- Run only one operation at a time for each project.
+- Check the project again immediately before changing it.
+- Stop if the project is different from what the user reviewed.
+- Return clear results such as waiting, running, successful, or failed.
+- Keep the agent running in the background without an IDE.
 
-### Acceptance criteria
+### How we will know it works
 
-- [ ] A user can select specific files for a commit.
-- [ ] Unselected changes are not committed.
-- [ ] Invalid paths are rejected.
-- [ ] A stale snapshot blocks the write operation.
-- [ ] Commit and push use local Git credentials without Pushly storing them.
-- [ ] Hook failures are returned clearly.
-- [ ] One repository cannot run conflicting operations concurrently.
-- [ ] The agent can run without an IDE being open.
-
----
-
-## Phase 4: Secure Backend and Agent Protocol
-
-**Status: Planned**
-
-### Purpose
-
-Connect the mobile app and desktop agent through an authenticated cloud relay without exposing the PC directly to the public internet.
-
-### Parts
-
-- Add Pushly account authentication.
-- Register and authenticate desktop devices.
-- Use outbound WSS from the agent.
-- Add short-lived QR/code pairing.
-- Bind device keys after pairing.
-- Support pairing revocation.
-- Add authenticated phone sessions.
-- Define typed command and result messages.
-- Include operation ID, expiry, nonce, repository identity, operation type, and validated arguments.
-- Require independent agent-side authorization.
-- Enforce the operation allowlist at the agent.
-- Add replay protection.
-- Add per-user, per-device, per-repository, and per-operation authorization.
-- Relay encrypted diff payloads without reading or storing plaintext source content.
-- Store operation metadata without storing source code or credentials.
-- Handle agent reconnects and heartbeats.
-- Reconcile state after uncertain network failures.
-- Never blindly repeat commit or push commands.
-
-### Acceptance criteria
-
-- [ ] The agent establishes an outbound authenticated connection.
-- [ ] A phone can pair through a short-lived code or QR code.
-- [ ] Revoked devices cannot issue commands.
-- [ ] Expired and replayed commands are rejected.
-- [ ] Invalid repository and path scopes are rejected by the agent.
-- [ ] Arbitrary shell commands are rejected.
-- [ ] The backend cannot read encrypted diff payloads.
-- [ ] Disconnects do not create duplicate commits or pushes.
+- [ ] The user can choose individual files.
+- [ ] Files not chosen by the user are not committed.
+- [ ] Unsafe file paths are rejected.
+- [ ] A project that changed after review is blocked.
+- [ ] Commit and push use the computer's existing Git login.
+- [ ] Git hook errors are shown clearly.
+- [ ] Two conflicting actions cannot run on the same project at once.
+- [ ] The agent works while the IDE is closed.
 
 ---
 
-## Phase 5: Flutter Mobile MVP
+## Phase 4: Secure Connection Between Phone and Computer
 
 **Status: Planned**
 
-### Purpose
+### What this phase means
 
-Provide the user-facing mobile workflow for controlling the authorized Windows agent.
+We will connect the phone app and Windows agent through a secure online relay. The relay helps them communicate, but it should not store the user's project.
 
-### Parts
+### What we will build
 
-- Login and account session.
-- Device list and device status.
-- Pairing flow.
-- Configured-folder and repository list.
-- Repository details.
-- Branch and status display.
-- Changed-file selection.
-- Encrypted diff viewing.
-- Commit-message input.
-- Commit action.
-- Push action.
-- Operation progress.
-- Success and failure results.
+- Pushly account login.
+- Computer registration.
+- A secure connection started by the computer.
+- Phone-to-computer pairing with a short-lived code or QR code.
+- The ability to remove or block a paired device.
+- Secure phone sessions.
+- Clear message types for actions and results.
+- Checks that confirm who is making a request and which project it targets.
+- Protection against old requests being sent again.
+- Protection against requests for projects the user does not own.
+- Encrypted transfer of diffs so the relay cannot read them.
+- Operation history without saving source code or passwords.
+- Automatic reconnect and connection health checks.
+- Careful handling when the connection drops during a commit or push.
+- No blind repetition of a commit or push after an uncertain result.
+
+### How we will know it works
+
+- [ ] The agent connects securely to the relay.
+- [ ] A phone can pair using a temporary code or QR code.
+- [ ] A blocked device cannot send commands.
+- [ ] Old or repeated requests are rejected.
+- [ ] Requests for the wrong project are rejected.
+- [ ] Random computer commands are rejected.
+- [ ] The relay cannot read encrypted diffs.
+- [ ] A connection failure cannot create duplicate commits or pushes.
+
+---
+
+## Phase 5: Flutter Mobile App
+
+**Status: Planned**
+
+### What this phase means
+
+We will create the phone app that gives the user a simple way to control the authorized Windows agent.
+
+### What the app will include
+
+- Login.
+- List of connected computers.
+- Pairing screen.
+- List of approved folders and projects.
+- Project details.
+- Current branch and change list.
+- File selection.
+- Diff viewing.
+- Commit message box.
+- Commit and push buttons.
+- Progress while an action is running.
+- Clear success and failure messages.
 - Operation history and notifications.
-- Actionable messages for stale state, conflicts, authentication errors, hooks, timeouts, and offline agents.
+- Helpful messages for offline computers, changed projects, login problems, Git errors, and conflicts.
 
-### Acceptance criteria
+### How we will know it works
 
-- [ ] A user can pair with an authorized desktop agent.
-- [ ] A user can select a repository.
-- [ ] Status and changed files are displayed accurately.
-- [ ] A user can select exactly which files to commit.
-- [ ] Diffs are displayed after encrypted transfer.
-- [ ] Commit and push results are reliable and understandable.
-- [ ] Sensitive source content is not persisted by the backend.
+- [ ] The user can pair with their computer.
+- [ ] The user can choose a project.
+- [ ] The app shows the correct project status.
+- [ ] The user can choose exactly which files to commit.
+- [ ] Diffs can be viewed safely.
+- [ ] Commit and push results are clear and reliable.
+- [ ] The relay does not permanently save source code.
 
 ---
 
-## Phase 6: Security and Release Hardening
+## Phase 6: Final Safety and Release Checks
 
 **Status: Planned**
 
-### Purpose
+### What this phase means
 
-Prepare Pushly for real users and hostile or unreliable environments.
+Before sharing Pushly with real users, we will test it against mistakes, unsafe requests, unusual files, and unreliable internet connections.
 
-### Parts
+### What we will check
 
-- Review token storage and expiry.
-- Review device revocation and account recovery.
-- Test path traversal and symlink escapes.
-- Test unauthorized devices and repositories.
-- Test replayed and expired commands.
-- Test arbitrary command injection attempts.
-- Test oversized command and Git output.
-- Test Git hook timeouts.
-- Test malformed Git output and unusual filenames.
-- Test concurrent local Git activity.
-- Test disconnects during commit and push.
-- Add rate limiting.
-- Add audit logging without sensitive payloads.
-- Add secure Windows installation and update handling.
-- Document Git prerequisites and authentication behavior.
-- Add portable abstractions for later macOS and Linux support.
+- Login and device security.
+- Removing access from a device.
+- Unsafe file paths and links.
+- Access to someone else's computer or project.
+- Expired or repeated requests.
+- Attempts to run random commands.
+- Very large requests or responses.
+- Git hooks that take too long.
+- Unusual file names and broken Git output.
+- Someone changing the project locally while Pushly is using it.
+- Internet disconnections during commit or push.
+- Limits on repeated requests.
+- Useful logs that do not contain passwords or source code.
+- Safe Windows installation and updates.
+- Clear setup instructions and Git requirements.
+- Support for macOS and Linux later without rewriting the core.
 
-### Release gate
+### Release requirement
 
-Pushly is ready for MVP release only when a Windows-first end-to-end test succeeds with:
+Pushly will be ready for its first release when this complete story works:
 
-1. IDE closed.
-2. Agent running in the background.
-3. Phone on another network.
-4. Authorized repository discovered locally.
-5. Status reviewed on the phone.
-6. Explicit files selected.
-7. Commit created locally.
-8. Push completed through existing Git authentication.
-9. Reliable result returned to the phone.
-10. No source code or credentials stored by the backend.
+1. The IDE is closed.
+2. The agent is running on a Windows computer.
+3. The phone is on another network.
+4. The user pairs the phone with the computer.
+5. Pushly finds an approved project.
+6. The user reviews the changes.
+7. The user chooses specific files.
+8. The commit is created on the computer.
+9. The changes are pushed to GitHub.
+10. The phone receives a clear result.
+11. No passwords or project files are permanently stored by Pushly's relay.
 
 ---
 
-## Future Features
+## Features for Later
 
-These remain outside the MVP phases until the release gate is complete:
+These features are intentionally saved until the first version is reliable:
 
-- Pull and branch switching.
-- Branch creation, merge, stash, tags, and revert.
-- Pull request creation.
-- Test and build execution.
-- Development server control.
-- Log streaming.
+- Pulling changes.
+- Switching and creating branches.
+- Merging and stashing.
+- Tags and reverting commits.
+- Creating pull requests.
+- Running tests and builds.
+- Starting and stopping development servers.
+- Viewing development logs.
 - AI-generated commit messages and summaries.
 - AI code review.
-- Multi-device management beyond the initial pairing model.
-- macOS and Linux service packaging.
+- Managing many computers.
+- macOS and Linux background agents.

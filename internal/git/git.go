@@ -66,6 +66,46 @@ func (c Client) Execute(ctx context.Context, repositoryPath, operation string) (
 	return Result{Output: output}, nil
 }
 
+func (c Client) Status(ctx context.Context, repositoryPath string) (Status, error) {
+	if c.Runner == nil {
+		return Status{}, fmt.Errorf("git runner is not configured")
+	}
+
+	commandContext, cancel := context.WithTimeout(ctx, c.Timeout)
+	defer cancel()
+
+	output, err := c.Runner.Run(commandContext, repositoryPath, []string{
+		"status", "--porcelain=v1", "-z", "-b",
+	})
+	if err != nil {
+		return Status{}, err
+	}
+
+	return ParseStatus(output)
+}
+
+func (c Client) RepositoryRoot(ctx context.Context, repositoryPath string) (string, error) {
+	if c.Runner == nil {
+		return "", fmt.Errorf("git runner is not configured")
+	}
+
+	commandContext, cancel := context.WithTimeout(ctx, c.Timeout)
+	defer cancel()
+
+	output, err := c.Runner.Run(commandContext, repositoryPath, []string{
+		"rev-parse", "--show-toplevel",
+	})
+	if err != nil {
+		return "", err
+	}
+
+	root := strings.TrimSpace(output)
+	if root == "" {
+		return "", fmt.Errorf("git returned an empty repository root")
+	}
+	return root, nil
+}
+
 func allowedArguments(operation string) ([]string, bool) {
 	commands := map[string][]string{
 		"status": {"status", "--short", "--branch"},

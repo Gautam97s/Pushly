@@ -67,9 +67,11 @@ From the repository root:
 
 ```powershell
 go run ./cmd/pushly status .
+go run ./cmd/pushly status-json .
 go run ./cmd/pushly diff .
 go run ./cmd/pushly branch .
 go run ./cmd/pushly remote .
+go run ./cmd/pushly scan .
 ```
 
 The command format is:
@@ -83,9 +85,11 @@ The current CLI supports only these fixed operations:
 | Operation | Description |
 | --- | --- |
 | `status` | Shows the branch and short working-tree status. |
+| `status-json` | Returns machine-readable repository status. |
 | `diff` | Shows the unstaged working-tree diff. |
 | `branch` | Shows the current branch. |
 | `remote` | Shows configured Git remotes. |
+| `scan` | Discovers repositories below a folder using bounded scanning. |
 
 Unsupported operations are rejected. The CLI does not accept arbitrary shell commands.
 
@@ -160,6 +164,8 @@ Repository discovery will:
 - Validate repository roots using Git.
 - Keep repository-relative paths separate from operating-system paths.
 - Avoid reading or uploading source files during discovery.
+
+When a user explicitly selects an untracked file, Pushly may read it through a bounded repository-relative file API. Absolute paths, traversal paths, symlink escapes, non-regular files, and files over the configured size limit are rejected.
 
 ## Planned Git Operations
 
