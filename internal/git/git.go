@@ -21,6 +21,7 @@ type osRunner struct{}
 func (osRunner) Run(ctx context.Context, repositoryPath string, arguments []string) (string, error) {
 	command := exec.CommandContext(ctx, "git", arguments...)
 	command.Dir = repositoryPath
+	command.Env = append(command.Environ(), "GIT_TERMINAL_PROMPT=0")
 	output, err := command.CombinedOutput()
 	if err != nil {
 		if ctx.Err() != nil {
