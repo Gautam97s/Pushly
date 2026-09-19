@@ -144,32 +144,44 @@ go run ./cmd/pushly push . origin main
 
 ## Phase 4: Secure Connection Between Phone and Computer
 
-**Status: Planned (Next)**
+**Status: Completed**
 
 ### What this phase means
 
-We will connect the phone app and Windows agent through a secure online relay. The relay helps them communicate without storing the user's source code.
+We created the secure online relay and communication protocol connecting the phone app and Windows agent without storing or exposing the user's source code.
 
-### What we will build
+### What was built
 
-- Pushly account login.
-- Computer registration.
-- A secure outbound connection started by the computer agent (WebSocket/HTTPS).
-- Phone-to-computer pairing with a short-lived pairing code or QR code.
-- Device authorization and revocation.
-- Scoped command routing and replay attack protection.
-- Encrypted transfer of diffs so the relay cannot inspect them.
-- Connection health checks and reconnection resiliency.
+- **Protocol Envelope & Actions**: Standard typed JSON envelopes (`Message`, `CommandPayload`, `CommandResponsePayload`) with timestamp validation and expiration windows.
+- **End-to-End Encryption (E2EE)**: Authenticated AES-256-GCM payload encryption ensuring plaintext diffs and file contents are never exposed to the relay.
+- **Replay Protection**: Cryptographic nonce and sliding TTL replay cache rejecting duplicate and expired command requests.
+- **Pairing & Session Management**: Generates 6-character short-lived pairing codes (5-minute TTL) with one-time use consumption, shared AES key derivation, and instant device revocation.
+- **Relay Server**: Zero-knowledge HTTP/SSE streaming router dispatching commands to outbound connected desktop agents.
+- **Agent Relay Client**: Reconnection loop with exponential backoff, automated command dispatch, and response encryption.
+- **CLI Commands**: Added `pushly agent run` and `pushly agent pair`.
 
-### How we will know it works
+### Try it
 
-- [ ] The agent connects securely to the relay.
-- [ ] A phone can pair using a temporary code or QR code.
-- [ ] A blocked device cannot send commands.
-- [ ] Old or repeated requests are rejected.
-- [ ] Requests for unapproved projects are rejected.
-- [ ] The relay cannot read encrypted diffs.
-- [ ] A connection failure cannot create duplicate commits or pushes.
+```powershell
+# In terminal 1 (start relay):
+go run ./cmd/relay --port 8080
+
+# In terminal 2 (start agent):
+go run ./cmd/pushly agent run --relay http://localhost:8080
+
+# In terminal 3 (generate pairing code):
+go run ./cmd/pushly agent pair --relay http://localhost:8080
+```
+
+### What is confirmed
+
+- [x] The agent connects securely to the relay via outbound stream.
+- [x] A phone can pair using a temporary 6-character code.
+- [x] A blocked or revoked device cannot send commands.
+- [x] Old or repeated requests are rejected by replay protection.
+- [x] Requests for unapproved projects are rejected by the agent coordinator.
+- [x] Diffs and sensitive payloads are encrypted end-to-end with AES-256-GCM.
+- [x] Full end-to-end pairing and encrypted command tests pass.
 
 ---
 

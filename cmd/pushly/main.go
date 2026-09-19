@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -70,8 +71,88 @@ func main() {
 	case "push":
 		handlePushCommand(ctx, ag, os.Args[2:])
 
+	case "agent":
+		handleAgentCommand(ag, os.Args[2:])
+
 	default:
 		printUsage()
+		os.Exit(2)
+	}
+}
+
+func handleAgentCommand(ag *agent.Agent, args []string) {
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "usage: pushly agent <run|pair> [options]")
+		os.Exit(2)
+	}
+
+	subcommand := args[0]
+	switch subcommand {
+	case "run":
+		fs := flag.NewFlagSet("agent run", flag.ExitOnError)
+		relayURL := fs.String("relay", "http://localhost:8080", "Pushly relay server URL")
+		agentID := fs.String("id", "", "Agent device identifier")
+		agentName := fs.String("name", "", "Agent display name")
+		_ = fs.Parse(args[1:])
+
+		if *agentName == "" {
+			hostname, _ := os.Hostname()
+			if hostname == "" {
+				hostname = "Pushly PC"
+			}
+			*agentName = hostname
+		}
+		if *agentID == "" {
+			*agentID = "agent-" + strings.ToLower(*agentName)
+		}
+
+		rc := agent.NewRelayClient(ag, *relayURL, *agentID, *agentName)
+		fmt.Printf("Pushly Agent running as %q (ID: %s)\nConnected to Relay: %s\nPress Ctrl+C to stop.\n", *agentName, *agentID, *relayURL)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		if err := rc.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			fmt.Fprintf(os.Stderr, "agent exited with error: %v\n", err)
+			os.Exit(1)
+		}
+
+	case "pair":
+		fs := flag.NewFlagSet("agent pair", flag.ExitOnError)
+		relayURL := fs.String("relay", "http://localhost:8080", "Pushly relay server URL")
+		agentID := fs.String("id", "", "Agent device identifier")
+		agentName := fs.String("name", "", "Agent display name")
+		_ = fs.Parse(args[1:])
+
+		if *agentName == "" {
+			hostname, _ := os.Hostname()
+			if hostname == "" {
+				hostname = "Pushly PC"
+			}
+			*agentName = hostname
+		}
+		if *agentID == "" {
+			*agentID = "agent-" + strings.ToLower(*agentName)
+		}
+
+		rc := agent.NewRelayClient(ag, *relayURL, *agentID, *agentName)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		code, err := rc.RequestPairingCode(ctx)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to get pairing code from relay: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Println("==================================================")
+		fmt.Printf("          PAIRING CODE: %s\n", code)
+		fmt.Println("==================================================")
+		fmt.Println("Enter this code in the Pushly phone app to pair.")
+		fmt.Println("This code will expire in 5 minutes.")
+
+	default:
+		fmt.Fprintf(os.Stderr, "unknown agent subcommand %q; allowed: run, pair\n", subcommand)
 		os.Exit(2)
 	}
 }
@@ -249,6 +330,7 @@ func printUsage() {
 Pushly - Remote Git Manager CLI
 
 Usage:
+  pushly agent <run|pair> [options]
   pushly folder <list|add|remove> [<path>]
   pushly scan [<path>]
   pushly status <repository-path>
